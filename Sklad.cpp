@@ -17,6 +17,8 @@ Item::Item(int space)
     ;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////
+
 Shelving::Shelving(int capacity)
 :m_capacity(capacity),
 m_freeSpace(capacity)
@@ -59,6 +61,8 @@ const std::list<Item*>& Shelving::GetItemsList()
     return m_items;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////
+
 StackerCrane::StackerCrane(int capacity)
 :m_capacity(capacity)
 {
@@ -80,4 +84,48 @@ void StackerCrane::PutItemOnShelving(Shelving* pShelving)
         m_items.erase(m_items.begin());
     else
         std::cout << "StackerCrane Error! Can't put item on shelving" << std::endl;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+Dock::Dock(int capacity)
+:m_capacity(capacity),
+m_freeSpace(capacity)
+{
+    ;
+}
+
+bool Dock::AddItem(Item* pItem)
+{
+    if (pItem->GetSpace() <= m_freeSpace)
+    {
+        m_freeSpace -= pItem->GetSpace();
+        m_items.push_back(pItem);
+        return true;
+    }
+    else
+        std::cout << "Shelving Error! Can't add item, not enough free space" << std::endl;
+    return false;
+}
+
+void Dock::RemoveItem(Item* pItem)
+{
+    bool foundItem = false;
+    for (std::list<Item*>::iterator it = m_items.begin(); it != m_items.end(); ++it)
+    {
+        if (*it == pItem)
+        {
+            foundItem = true;
+            m_freeSpace += pItem->GetSpace();
+            m_items.erase(it);
+            break;
+        }
+    }
+    if (!foundItem)
+        std::cout << "Shelving Error! Can't fint item to remove" << std::endl;
+}
+
+const std::list<Item*>& Dock::GetItemsList()
+{
+    return m_items;
 }

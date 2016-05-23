@@ -50,4 +50,19 @@ private:
     std::list<Item*> m_items;   // список перевозимых элементов
 };
 
+class Dock  // док для приема/выдачи элементов со склада
+{
+public:
+    Dock(int capacity);
+    
+    bool AddItem(Item* pItem);
+    void RemoveItem(Item* pItem);
+    const std::list<Item*>& GetItemsList();
+    
+private:
+    int     m_capacity; // вместительность дока
+    int     m_freeSpace;    // свободное место
+    std::list<Item*> m_items;   // список элементов
+};
+
 #endif /* Sklad_hpp */
