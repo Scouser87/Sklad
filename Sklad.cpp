@@ -11,6 +11,11 @@
 #include <string>
 #include <iostream>
 
+int GetRandom(int first_value, int last_value)
+{
+    return first_value + rand() % last_value;
+}
+
 Item::Item(int space)
 :m_space(space)
 {
@@ -19,11 +24,32 @@ Item::Item(int space)
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
+#define SHELVING_DEF_CAPACITY 3
+
+Shelving::Shelving()
+:m_capacity(SHELVING_DEF_CAPACITY),
+m_freeSpace(m_capacity)
+{
+    
+}
+
 Shelving::Shelving(int capacity)
 :m_capacity(capacity),
-m_freeSpace(capacity)
+m_freeSpace(m_capacity)
 {
     ;
+}
+
+void Shelving::SetCapacity(int capacity)
+{
+    if (capacity < m_items.size())
+    {
+        std::cout << "Shelving Error! Can't set capacity" << std::endl;
+        return;
+    }
+    std::cout << "Shelving " << m_id << " SetCapacity " << capacity << std::endl;
+    m_capacity = capacity;
+    m_freeSpace = m_capacity - m_items.size();
 }
 
 bool Shelving::AddItem(Item* pItem)
@@ -63,10 +89,29 @@ const std::list<Item*>& Shelving::GetItemsList()
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
+#define CRANE_DEF_CAPACITY 3
+
+StackerCrane::StackerCrane()
+:m_capacity(CRANE_DEF_CAPACITY)
+{
+    
+}
+
 StackerCrane::StackerCrane(int capacity)
 :m_capacity(capacity)
 {
     
+}
+
+void StackerCrane::SetCapacity(int capacity)
+{
+    if (capacity < m_items.size())
+    {
+        std::cout << "StackerCrane Error! Can't set capacity" << std::endl;
+        return;
+    }
+    std::cout << "StackerCrane " << m_id << " SetCapacity " << capacity << std::endl;
+    m_capacity = capacity;
 }
 
 void StackerCrane::CatchItem(Item* pItem)
@@ -104,7 +149,7 @@ bool Dock::AddItem(Item* pItem)
         return true;
     }
     else
-        std::cout << "Shelving Error! Can't add item, not enough free space" << std::endl;
+        std::cout << "Dock Error! Can't add item, not enough free space" << std::endl;
     return false;
 }
 
@@ -122,10 +167,46 @@ void Dock::RemoveItem(Item* pItem)
         }
     }
     if (!foundItem)
-        std::cout << "Shelving Error! Can't fint item to remove" << std::endl;
+        std::cout << "Dock Error! Can't fint item to remove" << std::endl;
 }
 
 const std::list<Item*>& Dock::GetItemsList()
 {
     return m_items;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+Warehouse::Warehouse()
+:m_inputDock(50),
+m_outputDock(50)
+{
+    for (int i = 0; i < m_numCranes; ++i)
+    {
+        m_cranes[i].SetId(i);
+        m_cranes[i].SetCapacity(i+2);
+    }
+    for (int i = 0; i < m_numShelvings; ++i)
+    {
+        m_shelvings[i].SetId(i);
+        m_shelvings[i].SetCapacity(10);
+    }
+}
+
+void Warehouse::AddItemToDock(int itemSpace)
+{
+    Item* pItem = new Item(itemSpace);
+    m_inputDock.AddItem(pItem);
+}
+
+void Warehouse::Simulate()
+{
+    ;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+void sklad_main()
+{
+    Warehouse warehouse;
 }
