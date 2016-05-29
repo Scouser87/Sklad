@@ -16,10 +16,33 @@ int GetRandom(int first_value, int last_value)
     return first_value + rand() % last_value;
 }
 
-Item::Item(int space)
-:m_space(space)
+Item* Item::CreateItem(eItemType type)
 {
-    ;
+    Item* result = NULL;
+    switch (type) {
+        case eIT_generator:
+            result = new Item(type, 2, 500);
+            break;
+        case eIT_stabilizator:
+            result = new Item(type, 3, 1000);
+            break;
+        case eIT_transformator:
+            result = new Item(type, 4, 1500);
+            break;
+        default:
+            break;
+    }
+    return result;
+}
+
+const char* itemNames[] = { "generator", "stabilizator", "transformator" };
+
+Item::Item(eItemType type, int space, int price)
+:m_type(type),
+m_space(space),
+m_price(price)
+{
+    std::cout << "Create item " << itemNames[m_type] << std::endl;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -54,14 +77,14 @@ void Shelving::SetCapacity(int capacity)
 
 bool Shelving::AddItem(Item* pItem)
 {
-    if (pItem->GetSpace() <= m_freeSpace)
+    std::set<Item*>::iterator it = m_itemsToAdd.find(pItem);
+    if (it != m_itemsToAdd.end())   // если нашли элемент в списке "забронированных" элементов
     {
-        m_freeSpace -= pItem->GetSpace();
         m_items.push_back(pItem);
         return true;
     }
     else
-        std::cout << "Shelving Error! Can't add item, not enough free space" << std::endl;
+        std::cout << "Shelving Error! Can't add item" << std::endl;
     return false;
 }
 
@@ -87,48 +110,89 @@ const std::list<Item*>& Shelving::GetItemsList()
     return m_items;
 }
 
+bool Shelving::TryToBlockSpaceForItem(Item* pItem)
+{
+    if (pItem->GetSpace() <= m_freeSpace)
+    {
+        m_freeSpace -= pItem->GetSpace();
+        m_itemsToAdd.insert(pItem);
+        return true;
+    }
+    return false;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 #define CRANE_DEF_CAPACITY 3
 
 StackerCrane::StackerCrane()
-:m_capacity(CRANE_DEF_CAPACITY)
+:m_item(NULL),
+m_state(eCS_waitOnDock)
 {
     
 }
 
-StackerCrane::StackerCrane(int capacity)
-:m_capacity(capacity)
+bool StackerCrane::CatchItem(Item* pItem)
 {
-    
-}
-
-void StackerCrane::SetCapacity(int capacity)
-{
-    if (capacity < m_items.size())
+    if (!m_item)
     {
-        std::cout << "StackerCrane Error! Can't set capacity" << std::endl;
-        return;
+        m_item = pItem;
+        return true;
     }
-    std::cout << "StackerCrane " << m_id << " SetCapacity " << capacity << std::endl;
-    m_capacity = capacity;
-}
-
-void StackerCrane::CatchItem(Item* pItem)
-{
-    if (m_items.size() < m_capacity)
-        m_items.push_back(pItem);
     else
-        std::cout << "StackerCrane Error! Can't catch item, not enough space" << std::endl;
+        std::cout << "StackerCrane Error! Can't catch item" << std::endl;
+    return false;
 }
 
 void StackerCrane::PutItemOnShelving(Shelving* pShelving)
 {
     // если получается положить первый элемент на стеллаж, удаляем его из списка элементов крана 
-    if (!m_items.empty() && pShelving->AddItem(m_items.front()))
-        m_items.erase(m_items.begin());
+    if (m_item && pShelving->AddItem(m_item))
+        m_item = NULL;
     else
         std::cout << "StackerCrane Error! Can't put item on shelving" << std::endl;
+}
+
+void StackerCrane::MoveToShelving(Shelving* pShelving)
+{
+    m_state = eCS_moveToShelving;
+    m_shelvingToMove = pShelving;
+}
+
+void StackerCrane::MoveToDock(Dock* dock)
+{
+    m_state = eCS_moveToDock;
+    m_dockToMove = dock;
+}
+
+void StackerCrane::Simulate()
+{
+    switch (m_state)
+    {
+        case eCS_waitOnDock:
+            if (m_item)
+            {
+                if (Warehouse* wh = Warehouse::Get())
+                {
+                    if (Shelving* freeShelving = wh->GetShelvingForItem(m_item))
+                        MoveToShelving(freeShelving);
+                }
+            }
+            break;
+            
+        case eCS_moveToShelving:
+            if(m_shelvingToMove->AddItem(m_item))
+            {
+                m_item = NULL;
+                
+            }
+            break;
+            
+        default:
+            break;
+    }
+    
+    
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -151,6 +215,13 @@ bool Dock::AddItem(Item* pItem)
     else
         std::cout << "Dock Error! Can't add item, not enough free space" << std::endl;
     return false;
+}
+
+Item* Dock::GetFirstItem()
+{
+    if (m_items.size() > 0)
+        return m_items.front();
+    return NULL;
 }
 
 void Dock::RemoveItem(Item* pItem)
@@ -177,14 +248,20 @@ const std::list<Item*>& Dock::GetItemsList()
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
+Warehouse* Warehouse::Get()
+{
+    return s_warehouse;
+}
+
 Warehouse::Warehouse()
 :m_inputDock(50),
-m_outputDock(50)
+m_outputDock(50),
+m_revenue(0)
 {
+    s_warehouse = this;
     for (int i = 0; i < m_numCranes; ++i)
     {
         m_cranes[i].SetId(i);
-        m_cranes[i].SetCapacity(i+2);
     }
     for (int i = 0; i < m_numShelvings; ++i)
     {
@@ -193,15 +270,78 @@ m_outputDock(50)
     }
 }
 
-void Warehouse::AddItemToDock(int itemSpace)
+Warehouse::~Warehouse()
 {
-    Item* pItem = new Item(itemSpace);
-    m_inputDock.AddItem(pItem);
+    s_warehouse = NULL;
 }
 
 void Warehouse::Simulate()
 {
-    ;
+    long long step = 0; // шаг симуляции
+    while (m_revenue < 100000)
+    {
+        SimulateReceivingItems();
+        SimulateCranesLogic();
+        ++step;
+    }
+}
+
+void Warehouse::TryAddItemToDock(Item* pItem)
+{
+    m_inputDock.AddItem(pItem);
+}
+
+void Warehouse::SimulateReceivingItems()
+{
+    if (GetRandom(0, 100) > 30)
+    {
+        Item* pItem = Item::CreateItem((Item::eItemType)GetRandom(0, 2));
+        if (pItem)
+            TryAddItemToDock(pItem);
+    }
+}
+
+void Warehouse::SimulateCranesLogic()
+{
+    for (int i = 0; i < m_numCranes; ++i)
+        m_cranes[i].Simulate();
+    ChooseCraneForReceivedItems();
+}
+
+StackerCrane* Warehouse::GetFreeCraneAndCatchItem(Item* pItem)
+{
+    for (int i = 0; i < m_numCranes; ++i)
+    {
+        StackerCrane& crane = m_cranes[i];
+        if (crane.GetState() == StackerCrane::eCS_waitOnDock && crane.CatchItem(pItem))
+            return &crane;
+    }
+    return NULL;
+}
+
+void Warehouse::ChooseCraneForReceivedItems()
+{
+    // если в доке есть свободный элемент, пытаемся найти свободный кран чтобы этот элемент отвезти на склад
+    if (Item* pItem = m_inputDock.GetFirstItem())
+    {
+        if (StackerCrane* freeCrane = GetFreeCraneAndCatchItem(pItem))
+        {
+            if (Shelving* freeShelving = GetShelvingForItem(pItem))
+            {
+                freeCrane->MoveToShelving(freeShelving);
+            }
+        }
+    }
+}
+
+Shelving* Warehouse::GetShelvingForItem(Item* pItem)
+{
+    for (int i = 0; i < m_numShelvings; ++i)
+    {
+        if (m_shelvings[i].TryToBlockSpaceForItem(pItem))
+            return &m_shelvings[i];
+    }
+    return NULL;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -209,4 +349,5 @@ void Warehouse::Simulate()
 void sklad_main()
 {
     Warehouse warehouse;
+    warehouse.Simulate();
 }
