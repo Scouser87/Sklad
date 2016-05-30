@@ -211,7 +211,7 @@ m_outputDock(0,3)
     {
         m_shelvings[i].SetId(i);
         m_shelvings[i].SetSize(20, 6);
-        m_shelvings[i].SetPosition(3 + m_shelvings[i].GetSize().x*(i%2), yPos);
+        m_shelvings[i].SetPosition(3 + m_shelvings[i].GetSize().x*(i%2) + (i%2), yPos);
         if (i%2)
             yPos+=2;
     }
