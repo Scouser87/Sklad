@@ -31,8 +31,11 @@ public:
         return *this;
     }
     
+    friend int   operator == (const vec2 &a, const vec2 &b);
+    
     int x;
     int y;
+    
 };
 
 class StackerCrane;

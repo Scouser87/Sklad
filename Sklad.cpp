@@ -16,6 +16,11 @@ int GetRandom(int first_value, int last_value)
     return first_value + rand() % last_value;
 }
 
+int operator==(const vec2 &a, const vec2 &b)
+{
+    return (a.x == b.x) && (a.y == b.y);
+}
+
 const int elementSize = 1;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -201,7 +206,16 @@ void StackerCrane::Simulate()
                 m_state = eCS_unloadingItem;
         }
         else
+        {
             m_position += moveVec;
+            if (m_position == m_aim) // приехали
+            {
+                if (m_currentTask == eTT_loading)
+                    m_state = eCS_loadingItem;
+                else
+                    m_state = eCS_unloadingItem;
+            }
+        }
         std::cout << "Crane move to dock" << std::endl;
     }
     else if(m_state == eCS_loadingItem)
@@ -229,7 +243,16 @@ void StackerCrane::Simulate()
                 m_state = eCS_loadingItem;
         }
         else
+        {
             m_position += moveVec;
+            if (m_position == m_aim) // приехали
+            {
+                if (m_currentTask == eTT_loading)
+                    m_state = eCS_unloadingItem;
+                else
+                    m_state = eCS_loadingItem;
+            }
+        }
         std::cout << "Crane move to shelving" << std::endl;
     }
     else if(m_state == eCS_unloadingItem)
@@ -292,7 +315,7 @@ m_inputDock(0,2),
 m_outputDock(0,3)
 {
     s_warehouse = this;
-    m_crane.SetPosition(vec2(1,4));
+    m_crane.SetPosition(vec2(5,4));
     int yPos = 1;
     for (int i = 0; i < m_numShelvings; ++i)
     {
