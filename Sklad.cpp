@@ -150,21 +150,100 @@ short Shelving::GetCellState(int _x)
 
 StackerCrane::StackerCrane()
 :m_state(eCS_waiting),
-m_currentTask(eTT_none)
+m_currentTask(eTT_none),
+m_moveToShelving(NULL)
 {
     
 }
 
+#define CRANE_MOVE_Y_ON_X 1 // кран двигается по оси Y только по координате Х = 1
+
+vec2 StackerCrane::MoveToAim()
+{
+    vec2 result;
+    if (m_position.y != m_aim.y)
+    {
+        if (m_position.x != CRANE_MOVE_Y_ON_X)
+        {
+            if (m_position.x > CRANE_MOVE_Y_ON_X)
+                result.x--;
+            else if (m_position.x < CRANE_MOVE_Y_ON_X)
+                result.x++;
+        }
+        else
+        {
+            if (m_position.y > m_aim.y)
+                result.y--;
+            else if (m_position.y < m_aim.y)
+                result.y++;
+        }
+    }
+    else if(m_position.x != m_aim.x)
+    {
+        if (m_position.x > m_aim.x)
+            result.x--;
+        else if (m_position.x < m_aim.x)
+            result.x++;
+    }
+    return result;
+}
+
 void StackerCrane::Simulate()
 {
-    switch (m_state)
+    if (m_state == eCS_moveToDock)
     {
-        case eCS_moveToShelving:
-            
-            break;
-            
-        default:
-            break;
+        vec2 moveVec = MoveToAim();
+        if (moveVec.x == 0 && moveVec.y == 0) // приехали
+        {
+            if (m_currentTask == eTT_loading)
+                m_state = eCS_loadingItem;
+            else
+                m_state = eCS_unloadingItem;
+        }
+        else
+            m_position += moveVec;
+        std::cout << "Crane move to dock" << std::endl;
+    }
+    else if(m_state == eCS_loadingItem)
+    {
+        if (m_currentTask == eTT_loading)
+        {
+            vec2 aimPos;
+            if (Shelving* pShelving = Warehouse::Get()->FindPositionOfFreeCell(aimPos))
+            {
+                m_moveToShelving = pShelving;
+                m_state = eCS_moveToShelving;
+                SetAim(aimPos);
+            }
+        }
+        std::cout << "Crane loading item" << std::endl;
+    }
+    else if(m_state == eCS_moveToShelving)
+    {
+        vec2 moveVec = MoveToAim();
+        if (moveVec.x == 0 && moveVec.y == 0) // приехали
+        {
+            if (m_currentTask == eTT_loading)
+                m_state = eCS_unloadingItem;
+            else
+                m_state = eCS_loadingItem;
+        }
+        else
+            m_position += moveVec;
+        std::cout << "Crane move to shelving" << std::endl;
+    }
+    else if(m_state == eCS_unloadingItem)
+    {
+        if (m_currentTask == eTT_loading)
+        {
+            if (m_moveToShelving)
+            {
+                m_moveToShelving->AddElement(m_position);
+                m_state = eCS_waiting;
+                m_currentTask = eTT_none;
+            }
+        }
+        std::cout << "Crane unloading item" << std::endl;
     }
 }
 
@@ -175,7 +254,15 @@ void StackerCrane::AddTask(eTaskType type)
         m_currentTask = type;
         if (m_currentTask == eTT_loading)
         {
-            ;
+            vec2 inputDockPos = Warehouse::Get()->m_inputDock.GetPosition();
+            inputDockPos.x += 1;
+            if (m_position.x != inputDockPos.x || m_position.y != inputDockPos.y)
+            {
+                SetAim(inputDockPos);
+                m_state = eCS_moveToDock;
+            }
+            else
+                m_state = eCS_loadingItem;
         }
         else if (m_currentTask == eTT_unloading)
         {
@@ -205,7 +292,7 @@ m_inputDock(0,2),
 m_outputDock(0,3)
 {
     s_warehouse = this;
-    m_crane.SetPosition(vec2(1,2));
+    m_crane.SetPosition(vec2(1,4));
     int yPos = 1;
     for (int i = 0; i < m_numShelvings; ++i)
     {
@@ -215,6 +302,7 @@ m_outputDock(0,3)
         if (i%2)
             yPos+=2;
     }
+    m_crane.AddTask(StackerCrane::eTT_loading);
 }
 
 Warehouse::~Warehouse()
@@ -225,10 +313,29 @@ Warehouse::~Warehouse()
 void Warehouse::Simulate()
 {
     long long step = 0; // шаг симуляции
-//    while (1)
-//    {
-//        ++step;
-//    }
+    while (m_crane.GetState() != StackerCrane::eCS_waiting)
+    {
+        std::cout << "Step " << step << std::endl;
+        m_crane.Simulate();
+        Draw();
+        ++step;
+        std::cout << std::endl;
+    }
+}
+
+Shelving* Warehouse::FindPositionOfFreeCell(vec2& pos)
+{
+    Shelving* result = NULL;
+    for (int i = 0; i < m_numShelvings; ++i)
+    {
+        if (m_shelvings[i].FindPositionOfFreeCell(pos))
+        {
+            pos.y += 1;
+            result = &m_shelvings[i];
+            break;
+        }
+    }
+    return result;
 }
 
 bool Warehouse::IsInAnyShelving(const vec2& pos, short& cellState)

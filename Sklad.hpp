@@ -24,6 +24,13 @@ public:
         
     }
     
+    vec2 & operator+=(const vec2 &v)
+    {
+        x += v.x;
+        y += v.y;
+        return *this;
+    }
+    
     int x;
     int y;
 };
@@ -74,11 +81,13 @@ public:
         eCS_waiting,
         eCS_loadingItem,
         eCS_moveToShelving,
+        eCS_moveToDock,
         eCS_unloadingItem
     };
     
     StackerCrane();
     
+    vec2 MoveToAim();
     void Simulate();
     void AddTask(eTaskType type);
     
@@ -92,6 +101,8 @@ private:
     eTaskType       m_currentTask;
     vec2            m_position; // позиция в координатах склада
     vec2            m_aim;  // координаты цели
+    
+    Shelving*       m_moveToShelving;
 };
 
 class Dock  // окно для приема/выдачи элементов со склада
@@ -113,18 +124,19 @@ public:
     ~Warehouse();
     
     void Simulate();
+    Shelving* FindPositionOfFreeCell(vec2& pos);
+    
     bool IsInAnyShelving(const vec2& pos, short& cellState);
     void Draw();
     
 private:
     
-public:
-    
 private:
     static const int m_numShelvings = 6;
-    
+public:
     Dock m_inputDock;   // док для приема элементов со склада
     Dock m_outputDock;  // док для выдачи элементов со склада
+private:
     StackerCrane    m_crane;
     Shelving        m_shelvings[m_numShelvings];
     vec2            m_size;
