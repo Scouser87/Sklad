@@ -16,109 +16,132 @@ int GetRandom(int first_value, int last_value)
     return first_value + rand() % last_value;
 }
 
-Item* Item::CreateItem(eItemType type)
-{
-    Item* result = NULL;
-    switch (type) {
-        case eIT_generator:
-            result = new Item(type, 2, 500);
-            break;
-        case eIT_stabilizator:
-            result = new Item(type, 3, 1000);
-            break;
-        case eIT_transformator:
-            result = new Item(type, 4, 1500);
-            break;
-        default:
-            break;
-    }
-    return result;
-}
-
-const char* itemNames[] = { "generator", "stabilizator", "transformator" };
-
-Item::Item(eItemType type, int space, int price)
-:m_type(type),
-m_space(space),
-m_price(price)
-{
-    std::cout << "Create item " << itemNames[m_type] << std::endl;
-}
+const int elementSize = 1;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 #define SHELVING_DEF_CAPACITY 3
 
 Shelving::Shelving()
-:m_capacity(SHELVING_DEF_CAPACITY),
-m_freeSpace(m_capacity)
+:m_id(0),
+m_isFull(false)
 {
     
 }
 
-Shelving::Shelving(int capacity)
-:m_capacity(capacity),
-m_freeSpace(m_capacity)
+Shelving::~Shelving()
 {
-    ;
+    for (int i = 0; i < m_size.x; ++i)
+        delete [] m_cells[i];
+    delete [] m_cells;
 }
 
-void Shelving::SetCapacity(int capacity)
+void Shelving::SetSize(int _x, int _y)
 {
-    if (capacity < m_items.size())
+    m_size = vec2(_x, _y);
+    m_cells = new short*[_x];
+    for (int i = 0; i < _x; ++i)
     {
-        std::cout << "Shelving Error! Can't set capacity" << std::endl;
-        return;
+        m_cells[i] = new short[_y];
+        memset(m_cells[i], 0, sizeof(short)*_y);
     }
-    std::cout << "Shelving " << m_id << " SetCapacity " << capacity << std::endl;
-    m_capacity = capacity;
-    m_freeSpace = m_capacity - m_items.size();
 }
 
-bool Shelving::AddItem(Item* pItem)
+bool Shelving::FindPositionOfFreeCell(vec2& pos)
 {
-    std::set<Item*>::iterator it = m_itemsToAdd.find(pItem);
-    if (it != m_itemsToAdd.end())   // если нашли элемент в списке "забронированных" элементов
+    bool result = false;
+    for (int i = 0; i < m_size.x; ++i)
     {
-        m_items.push_back(pItem);
-        return true;
-    }
-    else
-        std::cout << "Shelving Error! Can't add item" << std::endl;
-    return false;
-}
-
-void Shelving::RemoveItem(Item* pItem)
-{
-    bool foundItem = false;
-    for (std::list<Item*>::iterator it = m_items.begin(); it != m_items.end(); ++it)
-    {
-        if (*it == pItem)
+        for (int j = 0; j < m_size.y; ++j)
         {
-            foundItem = true;
-            m_freeSpace += pItem->GetSpace();
-            m_items.erase(it);
+            if (m_cells[i][j] == 0)
+            {
+                result = true;
+                pos.x = m_position.x + i;
+                pos.y = m_position.y;
+                return result;
+            }
+        }
+    }
+    return result;
+}
+
+bool Shelving::FindPositionOfLastElement(vec2& pos)
+{
+    bool result = false;
+    for (int i = m_size.x - 1; i >= 0; --i)
+    {
+        for (int j = m_size.y-1; j >= 0; --j)
+        {
+            if (m_cells[i][j] == 0)
+            {
+                result = true;
+                pos.x = m_position.x + i;
+                pos.y = m_position.y;
+                return result;
+            }
+        }
+    }
+    return result;
+}
+
+void Shelving::AddElement(const vec2& cranePosition)
+{
+    for (int i = 0; i < m_size.x; ++i)    // находим позицию на стеллаже по X где стоит кран
+    {
+        if (i == cranePosition.x - m_position.x)
+        {
+            for (int j = 0; j < m_size.y; ++j)  // ищем там свободную ячейку по координате Y
+            {
+                if (m_cells[i][j] == 0)
+                {
+                    // запихиваем элемент
+                    m_cells[i][j] = 1;
+                    if (i == m_size.x - 1 && j == m_size.y - 1)
+                        m_isFull = true;
+                    return;
+                }
+            }
+        }
+    }
+}
+
+void Shelving::RemoveElement(const vec2& cranePosition)
+{
+    for (int i = 0; i < m_size.x; ++i)    // находим позицию на стеллаже по X где стоит кран
+    {
+        if (i == cranePosition.x - m_position.x)
+        {
+            for (int j = 0; j < m_size.y; ++j)  // ищем там свободную ячейку по координате Y
+            {
+                if (m_cells[i][j] == 1)
+                {
+                    // вытаскиваем элемент
+                    m_cells[i][j] = 0;
+                    m_isFull = false;
+                    return;
+                }
+            }
+        }
+    }
+}
+
+short Shelving::GetCellState(int _x)
+{
+    short result = 0;
+    for (int i = 0; i < m_size.x; ++i)    // находим позицию на стеллаже по X
+    {
+        if (i == _x)
+        {
+            for (int j = 0; j < m_size.y; ++j)  // считаем кол-во занятых ячеек по координате Y
+            {
+                if (m_cells[i][j] == 1)
+                    result++;
+            }
             break;
         }
     }
-    if (!foundItem)
-        std::cout << "Shelving Error! Can't fint item to remove" << std::endl;
-}
-
-const std::list<Item*>& Shelving::GetItemsList()
-{
-    return m_items;
-}
-
-bool Shelving::TryToBlockSpaceForItem(Item* pItem)
-{
-    if (pItem->GetSpace() <= m_freeSpace)
-    {
-        m_freeSpace -= pItem->GetSpace();
-        m_itemsToAdd.insert(pItem);
-        return true;
-    }
-    return false;
+    return result;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -126,147 +149,71 @@ bool Shelving::TryToBlockSpaceForItem(Item* pItem)
 #define CRANE_DEF_CAPACITY 3
 
 StackerCrane::StackerCrane()
-:m_item(NULL),
-m_state(eCS_waitOnDock)
+:m_state(eCS_waiting),
+m_currentTask(eTT_none)
 {
     
-}
-
-bool StackerCrane::CatchItem(Item* pItem)
-{
-    if (!m_item)
-    {
-        m_item = pItem;
-        return true;
-    }
-    else
-        std::cout << "StackerCrane Error! Can't catch item" << std::endl;
-    return false;
-}
-
-void StackerCrane::PutItemOnShelving(Shelving* pShelving)
-{
-    // если получается положить первый элемент на стеллаж, удаляем его из списка элементов крана 
-    if (m_item && pShelving->AddItem(m_item))
-        m_item = NULL;
-    else
-        std::cout << "StackerCrane Error! Can't put item on shelving" << std::endl;
-}
-
-void StackerCrane::MoveToShelving(Shelving* pShelving)
-{
-    m_state = eCS_moveToShelving;
-    m_shelvingToMove = pShelving;
-}
-
-void StackerCrane::MoveToDock(Dock* dock)
-{
-    m_state = eCS_moveToDock;
-    m_dockToMove = dock;
 }
 
 void StackerCrane::Simulate()
 {
     switch (m_state)
     {
-        case eCS_waitOnDock:
-            if (m_item)
-            {
-                if (Warehouse* wh = Warehouse::Get())
-                {
-                    if (Shelving* freeShelving = wh->GetShelvingForItem(m_item))
-                        MoveToShelving(freeShelving);
-                }
-            }
-            break;
-            
         case eCS_moveToShelving:
-            if(m_shelvingToMove->AddItem(m_item))
-            {
-                m_item = NULL;
-                
-            }
+            
             break;
             
         default:
             break;
     }
-    
-    
+}
+
+void StackerCrane::AddTask(eTaskType type)
+{
+    if (m_currentTask == eTT_none)
+    {
+        m_currentTask = type;
+        if (m_currentTask == eTT_loading)
+        {
+            ;
+        }
+        else if (m_currentTask == eTT_unloading)
+        {
+            ;
+        }
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-Dock::Dock(int capacity)
-:m_capacity(capacity),
-m_freeSpace(capacity)
+Dock::Dock(int _x, int _y)
+:m_position(_x, _y)
 {
     ;
 }
 
-bool Dock::AddItem(Item* pItem)
-{
-    if (pItem->GetSpace() <= m_freeSpace)
-    {
-        m_freeSpace -= pItem->GetSpace();
-        m_items.push_back(pItem);
-        return true;
-    }
-    else
-        std::cout << "Dock Error! Can't add item, not enough free space" << std::endl;
-    return false;
-}
-
-Item* Dock::GetFirstItem()
-{
-    if (m_items.size() > 0)
-        return m_items.front();
-    return NULL;
-}
-
-void Dock::RemoveItem(Item* pItem)
-{
-    bool foundItem = false;
-    for (std::list<Item*>::iterator it = m_items.begin(); it != m_items.end(); ++it)
-    {
-        if (*it == pItem)
-        {
-            foundItem = true;
-            m_freeSpace += pItem->GetSpace();
-            m_items.erase(it);
-            break;
-        }
-    }
-    if (!foundItem)
-        std::cout << "Dock Error! Can't fint item to remove" << std::endl;
-}
-
-const std::list<Item*>& Dock::GetItemsList()
-{
-    return m_items;
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////
-
+Warehouse* Warehouse::s_warehouse = NULL;
 Warehouse* Warehouse::Get()
 {
     return s_warehouse;
 }
 
-Warehouse::Warehouse()
-:m_inputDock(50),
-m_outputDock(50),
-m_revenue(0)
+Warehouse::Warehouse(int _x, int _y)
+:m_size(_x, _y),
+m_inputDock(0,2),
+m_outputDock(0,3)
 {
     s_warehouse = this;
-    for (int i = 0; i < m_numCranes; ++i)
-    {
-        m_cranes[i].SetId(i);
-    }
+    m_crane.SetPosition(vec2(1,2));
+    int yPos = 1;
     for (int i = 0; i < m_numShelvings; ++i)
     {
         m_shelvings[i].SetId(i);
-        m_shelvings[i].SetCapacity(10);
+        m_shelvings[i].SetSize(20, 6);
+        m_shelvings[i].SetPosition(3 + m_shelvings[i].GetSize().x*(i%2), yPos);
+        if (i%2)
+            yPos+=2;
     }
 }
 
@@ -278,76 +225,63 @@ Warehouse::~Warehouse()
 void Warehouse::Simulate()
 {
     long long step = 0; // шаг симуляции
-    while (m_revenue < 100000)
+//    while (1)
+//    {
+//        ++step;
+//    }
+}
+
+bool Warehouse::IsInAnyShelving(const vec2& pos, short& cellState)
+{
+    bool result = false;
+    
+    for (int i = 0; i < m_numShelvings; ++i)
     {
-        SimulateReceivingItems();
-        SimulateCranesLogic();
-        ++step;
-    }
-}
-
-void Warehouse::TryAddItemToDock(Item* pItem)
-{
-    m_inputDock.AddItem(pItem);
-}
-
-void Warehouse::SimulateReceivingItems()
-{
-    if (GetRandom(0, 100) > 30)
-    {
-        Item* pItem = Item::CreateItem((Item::eItemType)GetRandom(0, 2));
-        if (pItem)
-            TryAddItemToDock(pItem);
-    }
-}
-
-void Warehouse::SimulateCranesLogic()
-{
-    for (int i = 0; i < m_numCranes; ++i)
-        m_cranes[i].Simulate();
-    ChooseCraneForReceivedItems();
-}
-
-StackerCrane* Warehouse::GetFreeCraneAndCatchItem(Item* pItem)
-{
-    for (int i = 0; i < m_numCranes; ++i)
-    {
-        StackerCrane& crane = m_cranes[i];
-        if (crane.GetState() == StackerCrane::eCS_waitOnDock && crane.CatchItem(pItem))
-            return &crane;
-    }
-    return NULL;
-}
-
-void Warehouse::ChooseCraneForReceivedItems()
-{
-    // если в доке есть свободный элемент, пытаемся найти свободный кран чтобы этот элемент отвезти на склад
-    if (Item* pItem = m_inputDock.GetFirstItem())
-    {
-        if (StackerCrane* freeCrane = GetFreeCraneAndCatchItem(pItem))
+        if (pos.y == m_shelvings[i].GetPosition().y)
         {
-            if (Shelving* freeShelving = GetShelvingForItem(pItem))
+            if(pos.x >= m_shelvings[i].GetPosition().x && pos.x < m_shelvings[i].GetPosition().x + m_shelvings[i].GetSize().x)
             {
-                freeCrane->MoveToShelving(freeShelving);
+                result = true;
+                cellState = m_shelvings[i].GetCellState(pos.x - m_shelvings[i].GetPosition().x);
             }
         }
     }
+    
+    return result;
 }
 
-Shelving* Warehouse::GetShelvingForItem(Item* pItem)
+void Warehouse::Draw()
 {
-    for (int i = 0; i < m_numShelvings; ++i)
+    std::cout << "Draw warehouse: " << std::endl;
+    short cellState = 0;
+    for (int j = 0; j < m_size.y; ++j)
     {
-        if (m_shelvings[i].TryToBlockSpaceForItem(pItem))
-            return &m_shelvings[i];
+        for (int i = 0; i < m_size.x; ++i)
+        {
+            vec2 pos(i,j);
+            if (pos.x == m_inputDock.GetPosition().x && pos.y == m_inputDock.GetPosition().y)
+                std::cout << "I";
+            else if (pos.x == m_outputDock.GetPosition().x && pos.y == m_outputDock.GetPosition().y)
+                std::cout << "P";
+            else if (pos.x == m_crane.GetPosition().x && pos.y == m_crane.GetPosition().y)
+                std::cout << "C";
+            else if (IsInAnyShelving(pos, cellState))
+                std::cout << cellState;
+            else
+                std::cout << "-";
+            
+            std::cout << " ";
+        }
+        std::cout << std::endl;
     }
-    return NULL;
+    std::cout << "Draw warehouse end." << std::endl;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 void sklad_main()
 {
-    Warehouse warehouse;
+    Warehouse warehouse(45, 7);
+    warehouse.Draw();
     warehouse.Simulate();
 }

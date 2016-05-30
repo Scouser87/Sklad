@@ -13,49 +13,48 @@
 #include <list>
 #include <set>
 
-class Item // хранимый элемент
+class vec2
 {
 public:
-    enum eItemType
+    vec2() { x = 0; y = 0; }
+    
+    vec2(int _x, int _y)
+    :x(_x), y(_y)
     {
-        eIT_transformator,
-        eIT_generator,
-        eIT_stabilizator
-    };
+        
+    }
     
-    static Item* CreateItem(eItemType type);
-    
-    Item(eItemType type, int space = 1, int price = 0);
-    
-    int GetSpace() { return m_space; }
-private:
-    eItemType m_type;
-    int m_space;    // сколько места занимает этот элемент на стеллаже
-    int m_price;    // цена элемента в рублях
+    int x;
+    int y;
 };
+
+class StackerCrane;
 
 class Shelving  // стеллаж
 {
 public:
     Shelving();
-    Shelving(int capacity);
+    ~Shelving();
     
     void SetId(int value) { m_id = value; }
-    void SetCapacity(int capacity);
-    bool AddItem(Item* pItem);
-    void RemoveItem(Item* pItem);
-    const std::list<Item*>& GetItemsList();
+    void SetPosition(int _x, int _y) { m_position = vec2(_x, _y); }
+    void SetSize(int _x, int _y);
     
-    int GetFreeSpace() { return m_freeSpace; }
-    bool TryToBlockSpaceForItem(Item* pItem); // попытка "забронировать" место для элемента на стеллаже
+    bool FindPositionOfFreeCell(vec2& pos); // возвращает позицию свободной ячейки в координатах склада
+    bool FindPositionOfLastElement(vec2& pos); // возвращает позицию последней занятой ячейки в координатах склада
     
+    void AddElement(const vec2& cranePosition);
+    void RemoveElement(const vec2& cranePosition);
+    
+    const vec2& GetSize() { return m_size; }    
+    const vec2& GetPosition() { return m_position; }
+    short GetCellState(int _x); // кол-во элементов в указанной по координате X ячейке
 private:
-    int     m_id;
-    int     m_capacity; // вместительность стеллажа
-    int     m_freeSpace;    // свободное место
-    
-    std::list<Item*> m_items;   // список элементов на стеллаже
-    std::set<Item*> m_itemsToAdd;  // список элементов, для которых забронировано место на стеллаже
+    int     m_id;       // идентификатор
+    vec2    m_position; // позиция стеллажа в координатах склада
+    vec2    m_size;     // x - длина, y - высота
+    short** m_cells;    // ячейки стеллажа
+    bool    m_isFull;   // индикатор заполненности
 };
 
 class Dock;
@@ -63,50 +62,46 @@ class Dock;
 class StackerCrane // кран-штабеллер
 {
 public:
+    enum eTaskType
+    {
+        eTT_none,
+        eTT_loading,    // получение элементов из окна приема и отгрузка на склад
+        eTT_unloading   // получение элементов со склада и отгрузка в окно приема
+    };
+    
     enum eCraneState
     {
-        eCS_waitOnDock,
+        eCS_waiting,
         eCS_loadingItem,
         eCS_moveToShelving,
-        eCS_moveToDock
+        eCS_unloadingItem
     };
     
     StackerCrane();
     
-    void SetId(int value) { m_id = value; }
-    bool CatchItem(Item* pItem);
-    void PutItemOnShelving(Shelving* pShelving);
-    
-    void MoveToShelving(Shelving* pShelving);
-    void MoveToDock(Dock* dock);
-    
     void Simulate();
+    void AddTask(eTaskType type);
     
     eCraneState GetState() { return m_state; }
+    void SetAim(const vec2& pos) { m_aim = pos; }
     
+    void SetPosition(const vec2& pos) { m_position = pos; }
+    const vec2& GetPosition() { return m_position; }
 private:
-    int m_id;
-    Item* m_item;   // перевозимый элемент
-    eCraneState m_state;
-    
-    Shelving* m_shelvingToMove; // стеллаж, к которому поедет кран
-    Dock* m_dockToMove; // док, к которому поедет кран
+    eCraneState     m_state;    // текущее состояние
+    eTaskType       m_currentTask;
+    vec2            m_position; // позиция в координатах склада
+    vec2            m_aim;  // координаты цели
 };
 
-class Dock  // док для приема/выдачи элементов со склада
+class Dock  // окно для приема/выдачи элементов со склада
 {
 public:
-    Dock(int capacity);
+    Dock(int _x, int _y);
     
-    bool AddItem(Item* pItem);
-    Item* GetFirstItem();
-    void RemoveItem(Item* pItem);
-    const std::list<Item*>& GetItemsList();
-    
+    const vec2& GetPosition() { return m_position; }
 private:
-    int     m_capacity; // вместительность дока
-    int     m_freeSpace;    // свободное место
-    std::list<Item*> m_items;   // список элементов
+    vec2 m_position;
 };
 
 class Warehouse // склад
@@ -114,32 +109,25 @@ class Warehouse // склад
 public:
     static Warehouse* s_warehouse;
     static Warehouse* Get();
-    Warehouse();
+    Warehouse(int _x, int _y);
     ~Warehouse();
     
     void Simulate();
+    bool IsInAnyShelving(const vec2& pos, short& cellState);
+    void Draw();
     
 private:
-    void TryAddItemToDock(Item* pItem); // попытка положить элемент в приемный док
-    void SimulateReceivingItems();  // симуляция поступления элементов на склад
-    void SimulateCranesLogic(); // симуляция логики кранов
-    StackerCrane* GetFreeCraneAndCatchItem(Item* pItem);   // возвращает указатель на кран, свободный в данный момент, который сможет отвезти элемент
-    void ChooseCraneForReceivedItems();     // пытаемся найти свободный кран чтобы этот элемент отвезти на склад
     
 public:
-    Shelving* GetShelvingForItem(Item* pItem);      // пытаемся найти свободный стеллаж, чтобы положить в него элемент
-    
     
 private:
-    static const int m_numCranes = 3;
-    static const int m_numShelvings = 10;
+    static const int m_numShelvings = 6;
     
     Dock m_inputDock;   // док для приема элементов со склада
     Dock m_outputDock;  // док для выдачи элементов со склада
-    StackerCrane    m_cranes[m_numCranes];
+    StackerCrane    m_crane;
     Shelving        m_shelvings[m_numShelvings];
-    
-    int             m_revenue;  // сумма денег полученная с реализации элементов со склада
+    vec2            m_size;
 };
 
 void sklad_main();
