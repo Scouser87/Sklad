@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <list>
 #include <set>
+#include <queue>
 
 class vec2
 {
@@ -40,6 +41,29 @@ public:
 
 class StackerCrane;
 
+class Item
+{
+    static unsigned int s_itemIdCounter;
+public:
+    enum eItemGroup
+    {
+        eIG_zagotovka = 1,
+        eIG_readyProduct,
+        eIG_instrument
+    };
+    
+    static Item* CreateItem(eItemGroup group, unsigned int type);
+    
+    Item(eItemGroup group, unsigned int type);
+    
+    int GetGroup() { return m_group; }
+    
+private:
+    unsigned int    m_id;
+    eItemGroup      m_group;
+    unsigned int    m_type;
+};
+
 class Shelving  // стеллаж
 {
 public:
@@ -53,18 +77,18 @@ public:
     bool FindPositionOfFreeCell(vec2& pos); // возвращает позицию свободной ячейки в координатах склада
     bool FindPositionOfLastElement(vec2& pos); // возвращает позицию последней занятой ячейки в координатах склада
     
-    void AddElement(const vec2& cranePosition);
-    void RemoveElement(const vec2& cranePosition);
+    void AddElement(const vec2& cranePosition, Item* pItem);
+    Item* RemoveElement(const vec2& cranePosition);
+    
+    Item* GetItemInCell(int _x, int _y);
     
     const vec2& GetSize() { return m_size; }    
     const vec2& GetPosition() { return m_position; }
-    short GetCellState(int _x); // кол-во элементов в указанной по координате X ячейке
 private:
     int     m_id;       // идентификатор
     vec2    m_position; // позиция стеллажа в координатах склада
     vec2    m_size;     // x - длина, y - высота
-    short** m_cells;    // ячейки стеллажа
-    bool    m_isFull;   // индикатор заполненности
+    Item*** m_cells;    // ячейки стеллажа
 };
 
 class Dock;
@@ -104,18 +128,62 @@ private:
     eTaskType       m_currentTask;
     vec2            m_position; // позиция в координатах склада
     vec2            m_aim;  // координаты цели
+    Item*           m_item;
     
     Shelving*       m_moveToShelving;
 };
 
+
+class sOrder
+{
+public:
+    sOrder() { }
+    
+    StackerCrane::eTaskType m_taskType;
+};
+
+class sOrderInput : public sOrder
+{
+public:
+    sOrderInput()
+    {
+        m_taskType = StackerCrane::eTT_loading;
+    }
+    Item* m_item;
+};
+
+class sOrderOutput : public sOrder
+{
+public:
+    sOrderOutput()
+    {
+        m_taskType = StackerCrane::eTT_unloading;
+    }
+    Item::eItemGroup itemGroup;
+    unsigned int itemType;
+};
+
+
 class Dock  // окно для приема/выдачи элементов со склада
 {
 public:
+    static const int m_maxNumOrders = 50;
+    
     Dock(int _x, int _y);
     
+    void Simulate();
+    
     const vec2& GetPosition() { return m_position; }
+    
+private:
+    void AddInputOrder();
+    void AddOutputOrder();
+    
 private:
     vec2 m_position;
+    
+    std::queue<sOrder> m_inputOrders;
+    std::queue<sOrder> m_outputOrders;
 };
 
 class Warehouse // склад
@@ -129,16 +197,15 @@ public:
     void Simulate();
     Shelving* FindPositionOfFreeCell(vec2& pos);
     
-    bool IsInAnyShelving(const vec2& pos, short& cellState);
+    Shelving* IsInAnyShelving(const vec2& pos);
+    std::string DrawShelvings(vec2 pos);
     void Draw();
     
 private:
     
-private:
-    static const int m_numShelvings = 6;
 public:
-    Dock m_inputDock;   // док для приема элементов со склада
-    Dock m_outputDock;  // док для выдачи элементов со склада
+    static const int m_numShelvings = 6;
+    Dock m_dock;   // док для приема / выдачи элементов со склада
 private:
     StackerCrane    m_crane;
     Shelving        m_shelvings[m_numShelvings];
