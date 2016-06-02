@@ -8,8 +8,6 @@
 
 #include "Sklad.hpp"
 
-#include <string>
-#include <iostream>
 
 int GetRandom(int first_value, int last_value)
 {
@@ -428,6 +426,11 @@ std::string Warehouse::DrawShelvings(vec2 pos)
     
     for (int j = 0; j < SHELVING_SIZE_Y; ++j)
     {
+        if (j != SHELVING_SIZE_Y-1)
+            output += "  | ";
+        else
+            output += std::to_string(pos.y) + " " + "|" + " ";
+            
         for (int i = 0; i < m_size.x; ++i)
         {
             vec2 posInShelving(i, pos.y);
@@ -435,52 +438,70 @@ std::string Warehouse::DrawShelvings(vec2 pos)
             {
                 Item* pItem = sh->GetItemInCell(i - sh->GetPosition().x, j);
                 if (pItem)
-                    output += std::to_string(pItem->GetGroup());
+                    output += "0" + std::to_string(pItem->GetGroup());
                 else
-                    output += "0";
+                    output += "00";
             }
             else
             {
                 if (j != SHELVING_SIZE_Y-1)
-                    output += " ";
+                    output += "  ";
                 else
-                    output += "-";
+                    output += "--";
             }
             output += " ";
         }
         if (j != SHELVING_SIZE_Y-1)
-            output += "\n";
+            output += " |\n";
     }
     
     return output;
 }
 
+
 void Warehouse::Draw()
 {
     std::cout << "Draw warehouse: " << std::endl;
-    short cellState = 0;
+    
+    std::cout << "  | ";
+    for (int i = 0; i < m_size.x; ++i)
+        std::cout << std::setw(2) << std::setfill('0') << i << " ";
+    std::cout << " |" << std::endl;
+    
+    std::cout << "__|";
+    for (int i = 0; i < m_size.x; ++i)
+        std::cout << "___";
+    std::cout << "__|" << std::endl;
+    
     for (int j = 0; j < m_size.y; ++j)
     {
         std::string output;
+        output += std::to_string(j) + " " + "|" + " ";
         for (int i = 0; i < m_size.x; ++i)
         {
             vec2 pos(i,j);
             if (pos.x == m_dock.GetPosition().x && pos.y == m_dock.GetPosition().y)
-                output += "D";
+                output += "DD";
             else if (pos.x == m_crane.GetPosition().x && pos.y == m_crane.GetPosition().y)
-                output += "C";
+                output += "CC";
             else if (IsInAnyShelving(pos))
             {
                 output = DrawShelvings(pos);
                 break;
             }
             else
-                output += "-";
+                output += "--";
             
             output += " ";
         }
-        std::cout << output << std::endl;
+        std::cout << output << " |" << std::endl;
     }
+    
+    std::cout << "__|";
+    for (int i = 0; i < m_size.x; ++i)
+        std::cout << "___";
+    std::cout << "__|" << std::endl;
+    
     std::cout << "Draw warehouse end." << std::endl;
 }
 

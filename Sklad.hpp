@@ -13,6 +13,9 @@
 #include <list>
 #include <set>
 #include <queue>
+#include <iomanip>
+#include <string>
+#include <iostream>
 
 class vec2
 {
