@@ -42,8 +42,6 @@ public:
     
 };
 
-class StackerCrane;
-
 class Item
 {
     static unsigned int s_itemIdCounter;
@@ -60,6 +58,7 @@ public:
     Item(eItemGroup group, unsigned int type);
     
     int GetGroup() { return m_group; }
+    int GetType() { return m_type; }
     
 private:
     unsigned int    m_id;
@@ -78,10 +77,10 @@ public:
     void SetSize(int _x, int _y);
     
     bool FindPositionOfFreeCell(vec2& pos); // возвращает позицию свободной ячейки в координатах склада
-    bool FindPositionOfLastElement(vec2& pos); // возвращает позицию последней занятой ячейки в координатах склада
+    Item* FindPositionOfItem(vec2& pos, Item::eItemGroup itemGroup, unsigned int itemType);
     
     void AddElement(const vec2& cranePosition, Item* pItem);
-    Item* RemoveElement(const vec2& cranePosition);
+    bool GetItem(const vec2& cranePosition, Item* pItem);
     
     Item* GetItemInCell(int _x, int _y);
     
@@ -95,6 +94,7 @@ private:
 };
 
 class Dock;
+class sOrder;
 
 class StackerCrane // кран-штабеллер
 {
@@ -102,8 +102,8 @@ public:
     enum eTaskType
     {
         eTT_none,
-        eTT_loading,    // получение элементов из окна приема и отгрузка на склад
-        eTT_unloading   // получение элементов со склада и отгрузка в окно приема
+        eTT_input,    // получение элементов из окна приема и отгрузка на склад
+        eTT_output   // получение элементов со склада и отгрузка в окно приема
     };
     
     enum eCraneState
@@ -118,8 +118,16 @@ public:
     StackerCrane();
     
     vec2 MoveToAim();
+    
+    void SetWaitingState();
+    void WaitingLogic();
+    void CatchItemOnShelving(Item* pItem, Shelving* pShelving);
+    void MoveToDockLogic();
+    void LoadingItemLogic();
+    void MoveToShelvingLogic();
+    void UnloadingItemLogic();
+    
     void Simulate();
-    void AddTask(eTaskType type);
     
     eCraneState GetState() { return m_state; }
     void SetAim(const vec2& pos) { m_aim = pos; }
@@ -128,19 +136,20 @@ public:
     const vec2& GetPosition() { return m_position; }
 private:
     eCraneState     m_state;    // текущее состояние
-    eTaskType       m_currentTask;
     vec2            m_position; // позиция в координатах склада
-    vec2            m_aim;  // координаты цели
-    Item*           m_item;
+    vec2            m_aim;      // координаты цели
     
-    Shelving*       m_moveToShelving;
+    Item*           m_item;             // груз, который кран везет в данный момент
+    Shelving*       m_moveToShelving;   // стеллаж, к которому крану нужно проехать
+    Item*           m_itemToCatch;      // груз, который кран собирается взять на стеллаже
+    sOrder*         m_currentOrder;     // заявка, которую обрабатывает кран
 };
 
 
 class sOrder
 {
 public:
-    sOrder() { }
+    sOrder():m_taskType(StackerCrane::eTT_none) { }
     
     StackerCrane::eTaskType m_taskType;
 };
@@ -150,7 +159,7 @@ class sOrderInput : public sOrder
 public:
     sOrderInput()
     {
-        m_taskType = StackerCrane::eTT_loading;
+        m_taskType = StackerCrane::eTT_input;
     }
     Item* m_item;
 };
@@ -160,7 +169,7 @@ class sOrderOutput : public sOrder
 public:
     sOrderOutput()
     {
-        m_taskType = StackerCrane::eTT_unloading;
+        m_taskType = StackerCrane::eTT_output;
     }
     Item::eItemGroup itemGroup;
     unsigned int itemType;
@@ -175,6 +184,10 @@ public:
     Dock(int _x, int _y);
     
     void Simulate();
+    sOrder* GetOrder();
+    
+    int GetNumOfInputOrders();
+    int GetNumOfOutputOrders();
     
     const vec2& GetPosition() { return m_position; }
     
@@ -185,8 +198,7 @@ private:
 private:
     vec2 m_position;
     
-    std::queue<sOrder> m_inputOrders;
-    std::queue<sOrder> m_outputOrders;
+    std::queue<sOrder*> m_orders;
 };
 
 class Warehouse // склад
@@ -199,6 +211,7 @@ public:
     
     void Simulate();
     Shelving* FindPositionOfFreeCell(vec2& pos);
+    bool FindPositionOfItem(vec2& pos, StackerCrane* crane, Item::eItemGroup itemGroup, unsigned int itemType);
     
     Shelving* IsInAnyShelving(const vec2& pos);
     std::string DrawShelvings(vec2 pos);

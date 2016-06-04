@@ -19,8 +19,6 @@ int operator==(const vec2 &a, const vec2 &b)
     return (a.x == b.x) && (a.y == b.y);
 }
 
-const int elementSize = 1;
-
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 unsigned int Item::s_itemIdCounter = 0;
@@ -63,7 +61,7 @@ void Shelving::SetSize(int _x, int _y)
     {
         m_cells[i] = new Item*[_y];
         for (int j = 0; j < _y; ++j)
-            m_cells[i][j] = GetRandom(0, 10) > 5 ? NULL : Item::CreateItem((Item::eItemGroup)GetRandom(1, 3), GetRandom(1, 5));
+            m_cells[i][j] = NULL; //GetRandom(0, 10) > 5 ? NULL : Item::CreateItem((Item::eItemGroup)GetRandom(1, 3), GetRandom(1, 5));
     }
 }
 
@@ -86,19 +84,23 @@ bool Shelving::FindPositionOfFreeCell(vec2& pos)
     return result;
 }
 
-bool Shelving::FindPositionOfLastElement(vec2& pos)
+Item* Shelving::FindPositionOfItem(vec2& pos, Item::eItemGroup itemGroup, unsigned int itemType)
 {
-    bool result = false;
-    for (int i = m_size.x - 1; i >= 0; --i)
+    Item* result = NULL;
+    for (int i = 0; i < m_size.x; ++i)
     {
-        for (int j = m_size.y-1; j >= 0; --j)
+        for (int j = 0; j < m_size.y; ++j)
         {
-            if (m_cells[i][j] == NULL)
+            Item* pItem = m_cells[i][j];
+            if (pItem != NULL)
             {
-                result = true;
-                pos.x = m_position.x + i;
-                pos.y = m_position.y;
-                return result;
+                if (pItem->GetGroup() == itemGroup && pItem->GetType() == itemType)
+                {
+                    pos.x = m_position.x + i;
+                    pos.y = m_position.y;
+                    result = pItem;
+                    return result;
+                }
             }
         }
     }
@@ -124,26 +126,24 @@ void Shelving::AddElement(const vec2& cranePosition, Item* pItem)
     }
 }
 
-Item* Shelving::RemoveElement(const vec2& cranePosition)
+bool Shelving::GetItem(const vec2& cranePosition, Item* pItem)
 {
-    Item* result = NULL;
     for (int i = 0; i < m_size.x; ++i)    // находим позицию на стеллаже по X где стоит кран
     {
         if (i == cranePosition.x - m_position.x)
         {
             for (int j = 0; j < m_size.y; ++j)  // ищем там свободную ячейку по координате Y
             {
-                if (m_cells[i][j])
+                if (m_cells[i][j] == pItem)
                 {
-                    // вытаскиваем элемент
-                    result = m_cells[i][j];
+                    // забираем элемент
                     m_cells[i][j] = NULL;
-                    return result;
+                    return true;
                 }
             }
         }
     }
-    return result;
+    return false;
 }
 
 Item* Shelving::GetItemInCell(int _x, int _y)
@@ -157,9 +157,10 @@ Item* Shelving::GetItemInCell(int _x, int _y)
 
 StackerCrane::StackerCrane()
 :m_state(eCS_waiting),
-m_currentTask(eTT_none),
 m_moveToShelving(NULL),
-m_item(NULL)
+m_item(NULL),
+m_currentOrder(NULL),
+m_itemToCatch(NULL)
 {
     
 }
@@ -196,92 +197,30 @@ vec2 StackerCrane::MoveToAim()
     return result;
 }
 
-void StackerCrane::Simulate()
+void StackerCrane::SetWaitingState()
 {
-    if (m_state == eCS_moveToDock)
+    m_state = eCS_waiting;
+    if (m_currentOrder)
     {
-        vec2 moveVec = MoveToAim();
-        if (moveVec.x == 0 && moveVec.y == 0) // приехали
-        {
-            if (m_currentTask == eTT_loading)
-                m_state = eCS_loadingItem;
-            else
-                m_state = eCS_unloadingItem;
-        }
-        else
-        {
-            m_position += moveVec;
-            if (m_position == m_aim) // приехали
-            {
-                if (m_currentTask == eTT_loading)
-                    m_state = eCS_loadingItem;
-                else
-                    m_state = eCS_unloadingItem;
-            }
-        }
-        std::cout << "Crane move to dock" << std::endl;
+        delete m_currentOrder;
+        m_currentOrder = NULL;
     }
-    else if(m_state == eCS_loadingItem)
+    if (m_item)
     {
-        if (m_currentTask == eTT_loading)
-        {
-            if(!m_item)
-                m_item = Item::CreateItem((Item::eItemGroup)GetRandom(1, 3), GetRandom(1, 5));
-            vec2 aimPos;
-            if (Shelving* pShelving = Warehouse::Get()->FindPositionOfFreeCell(aimPos))
-            {
-                m_moveToShelving = pShelving;
-                m_state = eCS_moveToShelving;
-                SetAim(aimPos);
-            }
-        }
-        std::cout << "Crane loading item" << std::endl;
+        delete m_item;
+        m_item = NULL;
     }
-    else if(m_state == eCS_moveToShelving)
-    {
-        vec2 moveVec = MoveToAim();
-        if (moveVec.x == 0 && moveVec.y == 0) // приехали
-        {
-            if (m_currentTask == eTT_loading)
-                m_state = eCS_unloadingItem;
-            else
-                m_state = eCS_loadingItem;
-        }
-        else
-        {
-            m_position += moveVec;
-            if (m_position == m_aim) // приехали
-            {
-                if (m_currentTask == eTT_loading)
-                    m_state = eCS_unloadingItem;
-                else
-                    m_state = eCS_loadingItem;
-            }
-        }
-        std::cout << "Crane move to shelving" << std::endl;
-    }
-    else if(m_state == eCS_unloadingItem)
-    {
-        if (m_currentTask == eTT_loading)
-        {
-            if (m_moveToShelving)
-            {
-                m_moveToShelving->AddElement(m_position, m_item);
-                m_item = NULL;
-                m_state = eCS_waiting;
-                m_currentTask = eTT_none;
-            }
-        }
-        std::cout << "Crane unloading item" << std::endl;
-    }
+    m_moveToShelving = NULL;
+    m_itemToCatch = NULL;
 }
 
-void StackerCrane::AddTask(eTaskType type)
+void StackerCrane::WaitingLogic()
 {
-    if (m_currentTask == eTT_none)
+    std::cout << "Crane waiting" << std::endl;
+    m_currentOrder = Warehouse::Get()->m_dock.GetOrder();
+    if (m_currentOrder)
     {
-        m_currentTask = type;
-        if (m_currentTask == eTT_loading)
+        if (m_currentOrder->m_taskType == eTT_input)
         {
             vec2 inputDockPos = Warehouse::Get()->m_dock.GetPosition();
             inputDockPos.x += 1;
@@ -293,10 +232,159 @@ void StackerCrane::AddTask(eTaskType type)
             else
                 m_state = eCS_loadingItem;
         }
-        else if (m_currentTask == eTT_unloading)
+        else if (m_currentOrder->m_taskType == eTT_output)
         {
-            ;
+            sOrderOutput* order = (sOrderOutput*)m_currentOrder;
+            vec2 shelvingPos;
+            if (Warehouse::Get()->FindPositionOfItem(shelvingPos, this, order->itemGroup, order->itemType))
+            {
+                if (m_position.x != shelvingPos.x || m_position.y != shelvingPos.y)
+                {
+                    SetAim(shelvingPos);
+                    m_state = eCS_moveToShelving;
+                }
+                else
+                    m_state = eCS_loadingItem;
+            }
         }
+    }
+}
+
+void StackerCrane::CatchItemOnShelving(Item* pItem, Shelving* pShelving)
+{
+    m_itemToCatch = pItem;
+    m_moveToShelving = pShelving;
+}
+
+void StackerCrane::MoveToDockLogic()
+{
+    std::cout << "Crane move to dock" << std::endl;
+    vec2 moveVec = MoveToAim();
+    if (moveVec.x == 0 && moveVec.y == 0) // приехали
+    {
+        if (m_currentOrder->m_taskType == eTT_input)
+            m_state = eCS_loadingItem;
+        else
+            m_state = eCS_unloadingItem;
+    }
+    else
+    {
+        m_position += moveVec;
+        if (m_position == m_aim) // приехали
+        {
+            if (m_currentOrder->m_taskType == eTT_input)
+                m_state = eCS_loadingItem;
+            else
+                m_state = eCS_unloadingItem;
+        }
+    }
+}
+
+void StackerCrane::LoadingItemLogic()
+{
+    std::cout << "Crane loading item" << std::endl;
+    if (m_currentOrder->m_taskType == eTT_input)
+    {
+        if(!m_item)
+        {
+            sOrderInput* order = (sOrderInput*)m_currentOrder;
+            m_item = order->m_item;
+        }
+        vec2 aimPos;
+        if (Shelving* pShelving = Warehouse::Get()->FindPositionOfFreeCell(aimPos))
+        {
+            m_moveToShelving = pShelving;
+            m_state = eCS_moveToShelving;
+            SetAim(aimPos);
+        }
+        else
+            SetWaitingState();
+    }
+    else    // eTT_output
+    {
+        if (m_moveToShelving)
+        {
+            if (m_moveToShelving->GetItem(m_position, m_itemToCatch))
+            {
+                m_item = m_itemToCatch;
+                m_itemToCatch = NULL;
+                m_moveToShelving = NULL;
+                
+                vec2 docPos = Warehouse::Get()->m_dock.GetPosition();
+                m_state = eCS_moveToDock;
+                SetAim(docPos);
+            }
+            else
+                SetWaitingState();
+        }
+        else
+            SetWaitingState();
+    }
+}
+
+void StackerCrane::MoveToShelvingLogic()
+{
+    std::cout << "Crane move to shelving" << std::endl;
+    vec2 moveVec = MoveToAim();
+    if (moveVec.x == 0 && moveVec.y == 0) // приехали
+    {
+        if (m_currentOrder->m_taskType == eTT_input)
+            m_state = eCS_unloadingItem;
+        else
+            m_state = eCS_loadingItem;
+    }
+    else
+    {
+        m_position += moveVec;
+        if (m_position == m_aim) // приехали
+        {
+            if (m_currentOrder->m_taskType == eTT_input)
+                m_state = eCS_unloadingItem;
+            else
+                m_state = eCS_loadingItem;
+        }
+    }
+}
+
+void StackerCrane::UnloadingItemLogic()
+{
+    std::cout << "Crane unloading item" << std::endl;
+    if (m_currentOrder->m_taskType == eTT_input)
+    {
+        if (m_moveToShelving)
+        {
+            m_moveToShelving->AddElement(m_position, m_item);
+            m_item = NULL;
+            SetWaitingState();
+        }
+    }
+    else    // eTT_output
+    {
+        SetWaitingState();
+    }
+}
+
+void StackerCrane::Simulate()
+{
+    if (m_state == eCS_waiting)
+    {
+        WaitingLogic();
+    }
+    else if (m_state == eCS_moveToDock)
+    {
+        MoveToDockLogic();
+    }
+    else if(m_state == eCS_loadingItem)
+    {
+        LoadingItemLogic();
+    }
+    else if(m_state == eCS_moveToShelving)
+    {
+        MoveToShelvingLogic();
+    }
+    else if(m_state == eCS_unloadingItem)
+    {
+        UnloadingItemLogic();
     }
 }
 
@@ -308,36 +396,66 @@ Dock::Dock(int _x, int _y)
     ;
 }
 
+sOrder* Dock::GetOrder()
+{
+    sOrder* result = NULL;
+    if (!m_orders.empty())
+    {
+        result = m_orders.front();
+        m_orders.pop();
+    }
+    return result;
+}
+
+int Dock::GetNumOfInputOrders()
+{
+    int counter = 0;
+    return counter;
+}
+
+int Dock::GetNumOfOutputOrders()
+{
+    int counter = 0;
+    return counter;
+}
+
 void Dock::Simulate()
 {
     // на каждом шаге с вероятностью 20% добавляется новая заявка
-    if (GetRandom(0, 100) < 20)
+    if (m_orders.size() < m_maxNumOrders)
     {
-        if (GetRandom(0, 100) > 50)
+        static int s_inputCount = 0;
+        if (s_inputCount < 4)
+        {
+            ++s_inputCount;
             AddInputOrder();
+        }
         else
+        {
+            s_inputCount = 0;
             AddOutputOrder();
+        }
     }
 }
 
 void Dock::AddInputOrder()
 {
-    if (m_inputOrders.size() < m_maxNumOrders)
+    if (m_orders.size() < m_maxNumOrders)
     {
-        sOrderInput newOrder;
-        newOrder.m_item = Item::CreateItem((Item::eItemGroup)GetRandom(1, 3), GetRandom(1, 5));
-        m_inputOrders.push(newOrder);
+        sOrderInput* newOrder = new sOrderInput;
+        newOrder->m_item = Item::CreateItem((Item::eItemGroup)GetRandom(1, 3), GetRandom(1, 5));
+        m_orders.push(newOrder);
     }
 }
 
 void Dock::AddOutputOrder()
 {
-    if (m_outputOrders.size() < m_maxNumOrders)
+    if (m_orders.size() < m_maxNumOrders)
     {
-        sOrderOutput newOrder;
-        newOrder.itemGroup = (Item::eItemGroup)GetRandom(1, 3);
-        newOrder.itemType = GetRandom(1, 5);
-        m_outputOrders.push(newOrder);
+        sOrderOutput* newOrder = new sOrderOutput;
+        newOrder->itemGroup = (Item::eItemGroup)GetRandom(1, 3);
+        newOrder->itemType = GetRandom(1, 5);
+        m_orders.push(newOrder);
     }
 }
 
@@ -376,7 +494,7 @@ Warehouse::~Warehouse()
 void Warehouse::Simulate()
 {
     long long step = 0; // шаг симуляции
-    while (m_crane.GetState() != StackerCrane::eCS_waiting)
+    while (step < 10000)
     {
         std::cout << "Step " << step << std::endl;
         m_dock.Simulate();
@@ -396,6 +514,22 @@ Shelving* Warehouse::FindPositionOfFreeCell(vec2& pos)
         {
             pos.y += 1;
             result = &m_shelvings[i];
+            break;
+        }
+    }
+    return result;
+}
+
+bool Warehouse::FindPositionOfItem(vec2& pos, StackerCrane* crane, Item::eItemGroup itemGroup, unsigned int itemType)
+{
+    bool result = false;
+    for (int i = 0; i < m_numShelvings; ++i)
+    {
+        if (Item *pItem = m_shelvings[i].FindPositionOfItem(pos, itemGroup, itemType))
+        {
+            pos.y += 1;
+            crane->CatchItemOnShelving(pItem, &m_shelvings[i]);
+            result = true;
             break;
         }
     }
@@ -511,5 +645,5 @@ void sklad_main()
 {
     Warehouse warehouse(45, 7);
     warehouse.Draw();
-//    warehouse.Simulate();
+    warehouse.Simulate();
 }
